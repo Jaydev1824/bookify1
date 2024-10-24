@@ -25,4 +25,4 @@ spec:
         - name: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
           value: "bookify-rudra-smit.firebaseapp.com"
         - name: NEXT_PUBLIC_FIREBASE_DATABASE_URL
-          value: "https://bookify-rudra-smit.firebaseio.com/"
+          value: "https://bookify-rudra-smit.firebaseio.com"
