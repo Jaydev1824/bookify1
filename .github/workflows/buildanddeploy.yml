@@ -1,0 +1,78 @@
+name: 'Build and Deploy to GKE'
+
+on:
+  push:
+    branches:
+      - master # Workflow will be triggered on a push to the 'master' branch
+
+env:
+  PROJECT_ID: 'bookify-rudra-smit' # Replace with your Google Cloud project ID
+  GAR_LOCATION: 'us-central1' # Update to your Artifact Registry region
+  GKE_CLUSTER: 'bookify-cluster' # Update to your GKE cluster name
+  GKE_ZONE: 'us-central1' # Update to your cluster zone
+  DEPLOYMENT_NAME: 'bookify' # Update to your Kubernetes deployment name
+  REPOSITORY: 'gcr.io' # Artifact Registry repository for the Docker image
+  IMAGE: 'bookify-nextjs' # Name of the Docker image
+  WORKLOAD_IDENTITY_PROVIDER: 'projects/911765173415/locations/global/workloadIdentityPools/my-pool/providers/github' # Replace with your Workload Identity Provider
+
+jobs:
+  setup-build-publish-deploy:
+    name: 'Setup, Build, Publish, and Deploy'
+    runs-on: 'ubuntu-latest'
+    environment: 'production'
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v4'
+
+      # Authenticate with Google Cloud using Workload Identity Federation
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: 'gke-deployer@bookify-rudra-smit.iam.gserviceaccount.com' # Replace with the correct service account
+
+      # Authenticate Docker to Google Cloud Artifact Registry
+      - name: 'Docker Auth'
+        uses: 'docker/login-action@v3'
+        with:
+          username: 'oauth2accesstoken'
+          password: '${{ steps.auth.outputs.token }}'
+          registry: '${{ env.GAR_LOCATION }}-docker.pkg.dev'
+
+      # Build and push the Docker container to Google Artifact Registry
+      - name: 'Build and push Docker container'
+        run: |-
+          DOCKER_TAG="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:${{ github.sha }}"
+
+          docker build \
+            --tag "${DOCKER_TAG}" \
+            --build-arg GITHUB_SHA="${{ github.sha }}" \
+            --build-arg GITHUB_REF="${{ github.ref }}" \
+            .
+
+          docker push "${DOCKER_TAG}"
+
+      # Set up GKE credentials
+      - name: 'Set up GKE credentials'
+        uses: 'google-github-actions/get-gke-credentials@v2'
+        with:
+          cluster_name: '${{ env.GKE_CLUSTER }}'
+          location: '${{ env.GKE_ZONE }}'
+
+      # Deploy the Docker image to the GKE cluster
+      - name: 'Deploy to GKE'
+        run: |-
+          # Update the image in the Kubernetes deployment
+          kubectl set image deployment/${{ env.DEPLOYMENT_NAME }} bookify=${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:${{ github.sha }}
+          
+          # Ensure the deployment succeeds
+          kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }}
+
+          # Show details of the deployed services
+          kubectl get services -o wide
