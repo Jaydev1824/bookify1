@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: bookify
-        image: gcr.io/[PROJECT_ID]/bookify-nextjs:latest
+        image: gcr.io/bookify-rudra-smit/bookify-nextjs:latest
         ports:
         - containerPort: 3000
         env:
