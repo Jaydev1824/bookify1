@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bookify-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: bookify
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
